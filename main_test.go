@@ -10,8 +10,12 @@ import (
 	"testing"
 )
 
+var resetMutex sync.Mutex
+
 // Helper function to reset global state between tests
 func resetGlobalState() {
+	resetMutex.Lock()
+	defer resetMutex.Unlock()
 	abort = make(chan struct{})
 	once = sync.Once{}
 }
@@ -206,10 +210,13 @@ func TestBuildTreeSafe(t *testing.T) {
 	})
 
 	t.Run("concurrent build tree safety", func(t *testing.T) {
+		resetGlobalState()
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
 		// Build tree multiple times concurrently
+		// Note: Each goroutine will share the same global abort channel,
+		// but buildTreeSafe is designed to handle concurrent access safely
 		var wg sync.WaitGroup
 		const numGoroutines = 10
 		results := make([]*Node, numGoroutines)
@@ -218,7 +225,8 @@ func TestBuildTreeSafe(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				resetGlobalState()
+				// Don't reset state in each goroutine - that causes races
+				// Instead, test that buildTreeSafe can be called concurrently
 				results[idx] = buildTreeSafe(tmpDir)
 			}(i)
 		}
