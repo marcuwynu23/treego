@@ -7,7 +7,7 @@ import (
 	"regexp"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/marcuwynu23/treego"
+	"github.com/marcuwynu23/treego/treego"
 )
 
 func main() {
