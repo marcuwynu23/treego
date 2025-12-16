@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -12,6 +12,7 @@ jobs:
   build:
     name: Build for ${{ matrix.os }}/${{ matrix.arch }}
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         include:
@@ -19,10 +20,16 @@ jobs:
             arch: amd64
             ext: ""
           - os: linux
+            arch: 386
+            ext: ""
+          - os: linux
             arch: arm64
             ext: ""
           - os: windows
             arch: amd64
+            ext: ".exe"
+          - os: windows
+            arch: 386
             ext: ".exe"
           - os: windows
             arch: arm64
@@ -33,63 +40,100 @@ jobs:
           - os: darwin
             arch: arm64
             ext: ""
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.23.5'
-        
-    - name: Get version from tag
-      id: tag
-      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      
-    - name: Build binary
-      env:
-        GOOS: ${{ matrix.os }}
-        GOARCH: ${{ matrix.arch }}
-        CGO_ENABLED: 0
-      run: |
-        go build -ldflags="-s -w" -o treego${{ matrix.ext }} main.go
-        
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: treego-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
-        path: treego${{ matrix.ext }}
-        
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.5"
+
+      - name: Get version from tag
+        id: tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Generate go.sum
+        run: go mod tidy
+
+      - name: Create bin directory
+        run: mkdir -p bin
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w" -o bin/treego${{ matrix.ext }} ./cmd/treego
+
+      - name: Create archive (Linux/macOS)
+        if: matrix.os == 'linux' || matrix.os == 'darwin'
+        shell: bash
+        run: |
+          cd bin
+          tar -czf ../treego-${{ matrix.os }}-${{ matrix.arch }}.tar.gz treego
+          cd ..
+          echo "Created treego-${{ matrix.os }}-${{ matrix.arch }}.tar.gz"
+
+      - name: Create archive (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          cd bin
+          zip -r ../treego-${{ matrix.os }}-${{ matrix.arch }}.zip treego.exe
+          cd ..
+          echo "Created treego-${{ matrix.os }}-${{ matrix.arch }}.zip"
+
+      - name: Upload artifact (Linux/macOS)
+        if: matrix.os == 'linux' || matrix.os == 'darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: treego-${{ matrix.os }}-${{ matrix.arch }}
+          path: treego-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+
+      - name: Upload artifact (Windows)
+        if: matrix.os == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: treego-${{ matrix.os }}-${{ matrix.arch }}
+          path: treego-${{ matrix.os }}-${{ matrix.arch }}.zip
+
   release:
     name: Create Release
     needs: build
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Get version from tag
-      id: tag
-      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-        
-    - name: Prepare release files
-      run: |
-        mkdir -p release
-        find artifacts -type f -exec cp {} release/ \;
-        
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ steps.tag.outputs.VERSION }}
-        name: Release ${{ steps.tag.outputs.VERSION }}
-        files: release/*
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
+          echo "Release files prepared:"
+          ls -lh release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.VERSION }}
+          name: Release ${{ steps.tag.outputs.VERSION }}
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

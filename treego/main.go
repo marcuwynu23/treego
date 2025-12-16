@@ -1,4 +1,4 @@
-package main
+package treego
 
 import (
 	"fmt"
@@ -7,8 +7,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-
-	"github.com/alecthomas/kingpin/v2"
 )
 
 type Node struct {
@@ -25,7 +23,7 @@ type job struct {
 
 var abort = make(chan struct{}) // closed to abort all goroutines
 
-func buildTreeSafe(path string) *Node {
+func BuildTreeSafe(path string) *Node {
 	select {
 	case <-abort:
 		// someone already triggered abort, stop immediately
@@ -35,7 +33,7 @@ func buildTreeSafe(path string) *Node {
 
 	info, err := os.Stat(path)
 	if err != nil {
-		closeOnce()
+		CloseOnce()
 		return nil
 	}
 
@@ -46,7 +44,7 @@ func buildTreeSafe(path string) *Node {
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		closeOnce()
+		CloseOnce()
 		return nil
 	}
 
@@ -63,7 +61,7 @@ func buildTreeSafe(path string) *Node {
 			default:
 			}
 			childPath := filepath.Join(path, e.Name())
-			childNodes[i] = buildTreeSafe(childPath)
+			childNodes[i] = BuildTreeSafe(childPath)
 		}(i, e)
 	}
 
@@ -80,7 +78,7 @@ func buildTreeSafe(path string) *Node {
 
 // helper to close abort channel only once
 var once sync.Once
-func closeOnce() {
+func CloseOnce() {
 	once.Do(func() {
 		close(abort)
 	})
@@ -88,16 +86,16 @@ func closeOnce() {
 
 
 
-func searchDFS(node *Node, query string) {
+func SearchDFS(node *Node, query string) {
 	if strings.Contains(strings.ToLower(node.Name), strings.ToLower(query)) {
 		fmt.Println(node.Path)
 	}
 	for _, child := range node.Children {
-		searchDFS(child, query)
+		SearchDFS(child, query)
 	}
 }
 
-func printTreeDFS(node *Node, prefix string, regex *regexp.Regexp, dirsOnly bool) {
+func PrintTreeDFS(node *Node, prefix string, regex *regexp.Regexp, dirsOnly bool) {
 	for i, child := range node.Children {
 		if dirsOnly && !child.IsDir {
 			continue
@@ -127,62 +125,14 @@ func printTreeDFS(node *Node, prefix string, regex *regexp.Regexp, dirsOnly bool
 		}
 		fmt.Println(prefix + branch + child.Name)
 		if child.IsDir {
-			printTreeDFS(child, nextPrefix, regex, dirsOnly)
+			PrintTreeDFS(child, nextPrefix, regex, dirsOnly)
 		}
 	}
 }
 
-func main() {
-	app := kingpin.New("treego", "Print directory tree and search files").
-		Version("v1.0").
-		Author("Mark Wayne Menorca")
-
-
-	app.UsageTemplate(`treego - Print directory tree and search files
-
-	Author: Mark Wayne Menorca
-	GitHub: https://github.com/marcuwynu23
-
-	Usage:
-	treego <path> [--search <query>] [--regex <pattern>] [--dirs-only] [--version]
-
-	Flags:
-	--search, -s       Search string (prints full path)
-	--regex, -r        Regex filter
-	--dirs-only, -d    Show only directories
-	--version          Show version
-	`)
-
-	path := app.Arg("path", "root directory to scan").Required().String()
-	search := app.Flag("search", "search string (prints full path)").Short('s').String()
-	regexStr := app.Flag("regex", "regex filter").Short('r').String()
-	dirsOnly := app.Flag("dirs-only", "show only directories").Short('d').Bool()
-
-	kingpin.MustParse(app.Parse(os.Args[1:]))
-
-	var re *regexp.Regexp
-	if *regexStr != "" {
-		var err error
-		re, err = regexp.Compile(*regexStr)
-		if err != nil {
-			fmt.Println("Invalid regex:", err)
-			return
-		}
-	}
-
-	rootPath := filepath.Clean(*path)
-	rootInfo, err := os.Stat(rootPath)
-	if err != nil {
-		fmt.Println("Invalid path:", err)
-		return
-	}
-
-	root := buildTreeSafe(rootPath)
-
-	if *search != "" {
-		searchDFS(root, *search)
-	} else {
-		fmt.Println(rootInfo.Name())
-		printTreeDFS(root, "", re, *dirsOnly)
-	}
+// ResetGlobalState resets the global abort channel and once variable for testing
+func ResetGlobalState() {
+	abort = make(chan struct{})
+	once = sync.Once{}
 }
+

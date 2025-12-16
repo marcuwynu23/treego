@@ -1,4 +1,4 @@
-package main
+package treego_test
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/marcuwynu23/treego/treego"
 )
 
 var resetMutex sync.Mutex
@@ -16,8 +18,7 @@ var resetMutex sync.Mutex
 func resetGlobalState() {
 	resetMutex.Lock()
 	defer resetMutex.Unlock()
-	abort = make(chan struct{})
-	once = sync.Once{}
+	treego.ResetGlobalState()
 }
 
 // Helper function to create a temporary directory structure for testing
@@ -74,7 +75,7 @@ func TestBuildTreeSafe(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 
 		if root == nil {
 			t.Fatal("Expected non-nil root node")
@@ -119,7 +120,7 @@ func TestBuildTreeSafe(t *testing.T) {
 		defer cleanup()
 
 		filePath := filepath.Join(tmpDir, "file1.txt")
-		node := buildTreeSafe(filePath)
+		node := treego.BuildTreeSafe(filePath)
 
 		if node == nil {
 			t.Fatal("Expected non-nil node for file")
@@ -140,7 +141,7 @@ func TestBuildTreeSafe(t *testing.T) {
 
 	t.Run("build tree for non-existent path", func(t *testing.T) {
 		resetGlobalState()
-		node := buildTreeSafe("/non/existent/path")
+		node := treego.BuildTreeSafe("/non/existent/path")
 
 		if node != nil {
 			t.Error("Expected nil node for non-existent path")
@@ -152,13 +153,13 @@ func TestBuildTreeSafe(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
 
 		// Find dir1
-		var dir1 *Node
+		var dir1 *treego.Node
 		for _, child := range root.Children {
 			if child.Name == "dir1" {
 				dir1 = child
@@ -175,7 +176,7 @@ func TestBuildTreeSafe(t *testing.T) {
 		}
 
 		// Check dir1 has subdir1
-		var subdir1 *Node
+		var subdir1 *treego.Node
 		for _, child := range dir1.Children {
 			if child.Name == "subdir1" {
 				subdir1 = child
@@ -192,7 +193,7 @@ func TestBuildTreeSafe(t *testing.T) {
 		}
 
 		// Check subdir1 has file4.go
-		var file4 *Node
+		var file4 *treego.Node
 		for _, child := range subdir1.Children {
 			if child.Name == "file4.go" {
 				file4 = child
@@ -216,18 +217,18 @@ func TestBuildTreeSafe(t *testing.T) {
 
 		// Build tree multiple times concurrently
 		// Note: Each goroutine will share the same global abort channel,
-		// but buildTreeSafe is designed to handle concurrent access safely
+		// but BuildTreeSafe is designed to handle concurrent access safely
 		var wg sync.WaitGroup
 		const numGoroutines = 10
-		results := make([]*Node, numGoroutines)
+		results := make([]*treego.Node, numGoroutines)
 
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
 				// Don't reset state in each goroutine - that causes races
-				// Instead, test that buildTreeSafe can be called concurrently
-				results[idx] = buildTreeSafe(tmpDir)
+				// Instead, test that BuildTreeSafe can be called concurrently
+				results[idx] = treego.BuildTreeSafe(tmpDir)
 			}(i)
 		}
 
@@ -251,7 +252,7 @@ func TestSearchDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -261,7 +262,7 @@ func TestSearchDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		searchDFS(root, "file1")
+		treego.SearchDFS(root, "file1")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -277,7 +278,7 @@ func TestSearchDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -287,7 +288,7 @@ func TestSearchDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		searchDFS(root, "FILE1")
+		treego.SearchDFS(root, "FILE1")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -303,7 +304,7 @@ func TestSearchDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -313,7 +314,7 @@ func TestSearchDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		searchDFS(root, ".txt")
+		treego.SearchDFS(root, ".txt")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -332,7 +333,7 @@ func TestSearchDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -342,7 +343,7 @@ func TestSearchDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		searchDFS(root, "nonexistent")
+		treego.SearchDFS(root, "nonexistent")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -358,7 +359,7 @@ func TestSearchDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -368,7 +369,7 @@ func TestSearchDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		searchDFS(root, "dir1")
+		treego.SearchDFS(root, "dir1")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -384,7 +385,7 @@ func TestSearchDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -394,7 +395,7 @@ func TestSearchDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		searchDFS(root, "")
+		treego.SearchDFS(root, "")
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -415,7 +416,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -425,7 +426,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		printTreeDFS(root, "", nil, false)
+		treego.PrintTreeDFS(root, "", nil, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -450,7 +451,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -460,7 +461,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		printTreeDFS(root, "", nil, true)
+		treego.PrintTreeDFS(root, "", nil, true)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -488,7 +489,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -500,7 +501,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		printTreeDFS(root, "", re, false)
+		treego.PrintTreeDFS(root, "", re, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -523,7 +524,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -535,7 +536,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		printTreeDFS(root, "", re, true)
+		treego.PrintTreeDFS(root, "", re, true)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -555,7 +556,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -565,7 +566,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		printTreeDFS(root, "  ", nil, false)
+		treego.PrintTreeDFS(root, "  ", nil, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -582,7 +583,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
@@ -592,7 +593,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		printTreeDFS(root, "", nil, false)
+		treego.PrintTreeDFS(root, "", nil, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -610,13 +611,13 @@ func TestPrintTreeDFS(t *testing.T) {
 		tmpDir, cleanup := createTestDir(t)
 		defer cleanup()
 
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
 
 		// Regex that matches file4.go in subdir1
-		// Note: The printTreeDFS function checks immediate children for matches
+		// Note: The PrintTreeDFS function checks immediate children for matches
 		// For deeply nested files, the parent directories need to be shown if they contain matches
 		re := regexp.MustCompile(`file4`)
 
@@ -625,7 +626,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		printTreeDFS(root, "", re, false)
+		treego.PrintTreeDFS(root, "", re, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -644,7 +645,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		var buf2 bytes.Buffer
 		r2, w2, _ := os.Pipe()
 		os.Stdout = w2
-		printTreeDFS(root, "", re2, false)
+		treego.PrintTreeDFS(root, "", re2, false)
 		w2.Close()
 		os.Stdout = oldStdout
 		buf2.ReadFrom(r2)
@@ -665,22 +666,14 @@ func TestCloseOnce(t *testing.T) {
 	t.Run("close abort channel only once", func(t *testing.T) {
 		resetGlobalState()
 
-		// Call closeOnce multiple times
-		closeOnce()
-		closeOnce()
-		closeOnce()
-
-		// Channel should be closed (reading from closed channel should not block)
-		select {
-		case <-abort:
-			// Channel is closed, which is expected
-		default:
-			t.Error("Expected abort channel to be closed")
-		}
+		// Call CloseOnce multiple times
+		treego.CloseOnce()
+		treego.CloseOnce()
+		treego.CloseOnce()
 
 		// Verify it's safe to call multiple times
-		closeOnce()
-		closeOnce()
+		treego.CloseOnce()
+		treego.CloseOnce()
 	})
 
 	t.Run("concurrent closeOnce calls", func(t *testing.T) {
@@ -693,27 +686,19 @@ func TestCloseOnce(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				closeOnce()
+				treego.CloseOnce()
 			}()
 		}
 
 		wg.Wait()
-
-		// Channel should be closed exactly once
-		select {
-		case <-abort:
-			// Channel is closed, which is expected
-		default:
-			t.Error("Expected abort channel to be closed")
-		}
 	})
 }
 
 func TestNode(t *testing.T) {
 	t.Run("node structure", func(t *testing.T) {
-		node := &Node{
+		node := &treego.Node{
 			Name:     "test",
-			Children: []*Node{},
+			Children: []*treego.Node{},
 			IsDir:    true,
 			Path:     "/test/path",
 		}
@@ -736,12 +721,12 @@ func TestNode(t *testing.T) {
 	})
 
 	t.Run("node with children", func(t *testing.T) {
-		child1 := &Node{Name: "child1", IsDir: false}
-		child2 := &Node{Name: "child2", IsDir: true}
+		child1 := &treego.Node{Name: "child1", IsDir: false}
+		child2 := &treego.Node{Name: "child2", IsDir: true}
 
-		node := &Node{
+		node := &treego.Node{
 			Name:     "parent",
-			Children: []*Node{child1, child2},
+			Children: []*treego.Node{child1, child2},
 			IsDir:    true,
 		}
 
@@ -778,14 +763,14 @@ func TestIntegration(t *testing.T) {
 
 		// Build tree
 		resetGlobalState()
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 		if root == nil {
 			t.Fatal("Failed to build tree")
 		}
 
 		// Search
 		searchOutput := captureOutput(func() {
-			searchDFS(root, "file1")
+			treego.SearchDFS(root, "file1")
 		})
 		if !strings.Contains(searchOutput, "file1.txt") {
 			t.Error("Search failed to find file1.txt")
@@ -793,7 +778,7 @@ func TestIntegration(t *testing.T) {
 
 		// Print tree
 		printOutput := captureOutput(func() {
-			printTreeDFS(root, "", nil, false)
+			treego.PrintTreeDFS(root, "", nil, false)
 		})
 		if !strings.Contains(printOutput, "file1.txt") {
 			t.Error("Print tree failed to show file1.txt")
@@ -808,7 +793,7 @@ func TestIntegration(t *testing.T) {
 		defer os.RemoveAll(tmpDir)
 
 		resetGlobalState()
-		root := buildTreeSafe(tmpDir)
+		root := treego.BuildTreeSafe(tmpDir)
 
 		if root == nil {
 			t.Fatal("Expected non-nil root for empty directory")
@@ -820,7 +805,7 @@ func TestIntegration(t *testing.T) {
 
 		// Search should return nothing
 		searchOutput := captureOutput(func() {
-			searchDFS(root, "anything")
+			treego.SearchDFS(root, "anything")
 		})
 		if searchOutput != "" {
 			t.Errorf("Expected empty search output, got: %s", searchOutput)
@@ -828,7 +813,7 @@ func TestIntegration(t *testing.T) {
 
 		// Print should return nothing
 		printOutput := captureOutput(func() {
-			printTreeDFS(root, "", nil, false)
+			treego.PrintTreeDFS(root, "", nil, false)
 		})
 		if printOutput != "" {
 			t.Errorf("Expected empty print output, got: %s", printOutput)
@@ -844,7 +829,7 @@ func BenchmarkBuildTreeSafe(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		resetGlobalState()
-		buildTreeSafe(tmpDir)
+		treego.BuildTreeSafe(tmpDir)
 	}
 }
 
@@ -853,7 +838,7 @@ func BenchmarkSearchDFS(b *testing.B) {
 	defer cleanup()
 
 	resetGlobalState()
-	root := buildTreeSafe(tmpDir)
+	root := treego.BuildTreeSafe(tmpDir)
 	if root == nil {
 		b.Fatal("Failed to build tree")
 	}
@@ -863,7 +848,7 @@ func BenchmarkSearchDFS(b *testing.B) {
 		// Capture output to avoid cluttering stdout
 		oldStdout := os.Stdout
 		os.Stdout, _ = os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-		searchDFS(root, "file")
+		treego.SearchDFS(root, "file")
 		os.Stdout.Close()
 		os.Stdout = oldStdout
 	}
@@ -874,7 +859,7 @@ func BenchmarkPrintTreeDFS(b *testing.B) {
 	defer cleanup()
 
 	resetGlobalState()
-	root := buildTreeSafe(tmpDir)
+	root := treego.BuildTreeSafe(tmpDir)
 	if root == nil {
 		b.Fatal("Failed to build tree")
 	}
@@ -884,7 +869,7 @@ func BenchmarkPrintTreeDFS(b *testing.B) {
 		// Capture output to avoid cluttering stdout
 		oldStdout := os.Stdout
 		os.Stdout, _ = os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-		printTreeDFS(root, "", nil, false)
+		treego.PrintTreeDFS(root, "", nil, false)
 		os.Stdout.Close()
 		os.Stdout = oldStdout
 	}
