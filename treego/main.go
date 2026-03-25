@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -23,6 +24,10 @@ type job struct {
 }
 
 var abort = make(chan struct{}) // closed to abort all goroutines
+
+type NameMatcher interface {
+	MatchString(s string) bool
+}
 
 type ExcludeMatcherKind int
 
@@ -204,6 +209,16 @@ func buildTreeSafe(path string, excludes []ExcludeMatcher, sem chan struct{}) *N
 
 	wg.Wait()
 
+	// Stable ordering improves UX and makes output deterministic:
+	// directories first, then files; both sorted by name.
+	sort.Slice(node.Children, func(i, j int) bool {
+		a, b := node.Children[i], node.Children[j]
+		if a.IsDir != b.IsDir {
+			return a.IsDir && !b.IsDir
+		}
+		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+	})
+
 	return node
 }
 
@@ -226,16 +241,31 @@ func SearchDFS(node *Node, query string) {
 	}
 }
 
-func PrintTreeDFS(node *Node, prefix string, regex *regexp.Regexp, dirsOnly bool) {
+func PrintTreeDFS(node *Node, prefix string, relPrefix string, matcher NameMatcher, dirsOnly bool) {
 	for i, child := range node.Children {
 		if dirsOnly && !child.IsDir {
 			continue
 		}
-		if regex != nil && !regex.MatchString(child.Name) {
+		rel := child.Name
+		if relPrefix != "" {
+			rel = relPrefix + "/" + child.Name
+		}
+		relOS := filepath.FromSlash(rel)
+
+		matches := true
+		if matcher != nil {
+			// Match against both name and relative path. This makes negative lookahead
+			// exclusions like "^(?!.*bin).*" work for anything under /bin as well.
+			matches = matcher.MatchString(child.Name) || matcher.MatchString(rel) || matcher.MatchString(relOS)
+		}
+
+		if !matches {
 			if child.IsDir {
 				var hasMatch bool
 				for _, grand := range child.Children {
-					if regex.MatchString(grand.Name) {
+					grandRel := rel + "/" + grand.Name
+					grandRelOS := filepath.FromSlash(grandRel)
+					if matcher.MatchString(grand.Name) || matcher.MatchString(grandRel) || matcher.MatchString(grandRelOS) {
 						hasMatch = true
 						break
 					}
@@ -256,7 +286,7 @@ func PrintTreeDFS(node *Node, prefix string, regex *regexp.Regexp, dirsOnly bool
 		}
 		fmt.Println(prefix + branch + child.Name)
 		if child.IsDir {
-			PrintTreeDFS(child, nextPrefix, regex, dirsOnly)
+			PrintTreeDFS(child, nextPrefix, rel, matcher, dirsOnly)
 		}
 	}
 }
