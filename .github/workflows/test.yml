@@ -28,6 +28,11 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Install make (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: choco install make -y
+
       - name: Verify dependencies
         run: go mod verify
 
@@ -35,11 +40,11 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: go test -v -race ./tests
+        run: make test-race
 
       - name: Run tests with coverage
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.23'
-        run: go test -race -coverprofile=coverage.out ./tests
+        run: make test-coverage
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.23'
@@ -91,24 +96,14 @@ jobs:
         with:
           go-version: '1.23'
 
-      - name: Create bin directory
-        shell: bash
-        run: mkdir -p bin
+      - name: Install make (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: choco install make -y
 
       - name: Build binary
         shell: bash
-        run: |
-          echo "Building binary: ${{ matrix.binary }}"
-          go build -v -o ${{ matrix.binary }} ./cmd/treego
-          BUILD_EXIT=$?
-          echo "Build exit code: $BUILD_EXIT"
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "❌ Build failed with exit code $BUILD_EXIT"
-            exit 1
-          fi
-          echo "✅ Build command completed successfully"
-          echo "Checking if binary was created:"
-          ls -la ${{ matrix.binary }} 2>/dev/null && echo "Binary exists!" || echo "Binary NOT found!"
+        run: make build OUT="${{ matrix.binary }}"
 
       - name: Verify binary exists (Linux/macOS)
         if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
