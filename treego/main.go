@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -23,7 +24,106 @@ type job struct {
 
 var abort = make(chan struct{}) // closed to abort all goroutines
 
+type ExcludeMatcherKind int
+
+const (
+	ExcludeExact ExcludeMatcherKind = iota
+	ExcludeGlob
+	ExcludeRegex
+)
+
+// ExcludeMatcher matches against either a base name or full path.
+// Supported formats:
+// - exact name (e.g. "node_modules")
+// - glob (e.g. "*.pem", "dist/*")
+// - regex via "re:<expr>" (Go regexp syntax), matched against name and full path
+type ExcludeMatcher struct {
+	Raw  string
+	Kind ExcludeMatcherKind
+	Re   *regexp.Regexp
+}
+
+func ParseExcludeMatchers(patterns []string) ([]ExcludeMatcher, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	out := make([]ExcludeMatcher, 0, len(patterns))
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if strings.HasPrefix(p, "re:") {
+			expr := strings.TrimSpace(strings.TrimPrefix(p, "re:"))
+			re, err := regexp.Compile(expr)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, ExcludeMatcher{Raw: p, Kind: ExcludeRegex, Re: re})
+			continue
+		}
+
+		if strings.ContainsAny(p, "*?[]") {
+			out = append(out, ExcludeMatcher{Raw: p, Kind: ExcludeGlob})
+			continue
+		}
+
+		out = append(out, ExcludeMatcher{Raw: p, Kind: ExcludeExact})
+	}
+	return out, nil
+}
+
+func (m ExcludeMatcher) matches(name, fullPath string) bool {
+	switch m.Kind {
+	case ExcludeExact:
+		return name == m.Raw || fullPath == m.Raw
+	case ExcludeGlob:
+		// filepath.Match is OS-specific for path separators; try both name and normalized path.
+		if ok, _ := filepath.Match(m.Raw, name); ok {
+			return true
+		}
+		if ok, _ := filepath.Match(m.Raw, filepath.ToSlash(fullPath)); ok {
+			return true
+		}
+		return false
+	case ExcludeRegex:
+		if m.Re == nil {
+			return false
+		}
+		return m.Re.MatchString(name) || m.Re.MatchString(fullPath)
+	default:
+		return false
+	}
+}
+
+func shouldExclude(excludes []ExcludeMatcher, name, fullPath string) bool {
+	for _, ex := range excludes {
+		if ex.matches(name, fullPath) {
+			return true
+		}
+	}
+	return false
+}
+
 func BuildTreeSafe(path string) *Node {
+	return BuildTreeSafeWithExcludes(path, nil)
+}
+
+func BuildTreeSafeWithExcludes(path string, excludes []ExcludeMatcher) *Node {
+	// Bound parallelism to avoid creating one goroutine per file/dir entry.
+	// This keeps traversal fast on large trees while preventing runaway goroutine/memory usage.
+	maxParallel := runtime.GOMAXPROCS(0) * 16
+	if maxParallel < 32 {
+		maxParallel = 32
+	}
+	if maxParallel > 512 {
+		maxParallel = 512
+	}
+	sem := make(chan struct{}, maxParallel)
+	return buildTreeSafe(path, excludes, sem)
+}
+
+func buildTreeSafe(path string, excludes []ExcludeMatcher, sem chan struct{}) *Node {
 	select {
 	case <-abort:
 		// someone already triggered abort, stop immediately
@@ -34,6 +134,10 @@ func BuildTreeSafe(path string) *Node {
 	info, err := os.Stat(path)
 	if err != nil {
 		CloseOnce()
+		return nil
+	}
+
+	if shouldExclude(excludes, info.Name(), path) {
 		return nil
 	}
 
@@ -48,30 +152,57 @@ func BuildTreeSafe(path string) *Node {
 		return nil
 	}
 
-	var wg sync.WaitGroup
-	childNodes := make([]*Node, len(entries))
+	// Fast path: process files inline; process directories with bounded parallelism.
+	var (
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+	)
 
-	for i, e := range entries {
+	for _, e := range entries {
+		select {
+		case <-abort:
+			return nil
+		default:
+		}
+
+		name := e.Name()
+		childPath := filepath.Join(path, name)
+		if shouldExclude(excludes, name, childPath) {
+			continue
+		}
+
+		isDir := e.IsDir()
+		if !isDir {
+			// Avoid extra syscalls: trust DirEntry for non-dirs.
+			mu.Lock()
+			node.Children = append(node.Children, &Node{Name: name, IsDir: false, Path: childPath})
+			mu.Unlock()
+			continue
+		}
+
 		wg.Add(1)
-		go func(i int, e os.DirEntry) {
+		go func(childPath string) {
 			defer wg.Done()
+
+			// Acquire a slot to bound concurrency.
 			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
 			case <-abort:
 				return
-			default:
 			}
-			childPath := filepath.Join(path, e.Name())
-			childNodes[i] = BuildTreeSafe(childPath)
-		}(i, e)
+
+			child := buildTreeSafe(childPath, excludes, sem)
+			if child == nil {
+				return
+			}
+			mu.Lock()
+			node.Children = append(node.Children, child)
+			mu.Unlock()
+		}(childPath)
 	}
 
 	wg.Wait()
-
-	for _, c := range childNodes {
-		if c != nil {
-			node.Children = append(node.Children, c)
-		}
-	}
 
 	return node
 }
