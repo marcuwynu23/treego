@@ -52,13 +52,14 @@ go build -o treego main.go
 ## Usage
 
 ```text
-treego <path> [--search <query>] [--regex <pattern>] [--dirs-only] [--version]
+treego <path> [--search <query>] [--regex <pattern>] [--exclude <pattern>...] [--dirs-only] [--version]
 ```
 
 ### Flags
 
 - `--search`, `-s` : Search string. Prints full path of matching files.
 - `--regex`, `-r` : Regex filter to match file or directory names.
+- `--exclude`, `-x` : Exclude patterns (repeatable). Supports exact name (`node_modules`), glob (`*.pem`), or regex (`re:<expr>`).
 - `--dirs-only`, `-d` : Show only directories.
 - `--version` : Show TreeGo version.
 
@@ -86,6 +87,12 @@ Use regex to filter names:
 
 ```bash
 treego /path/to/project --regex "\.go$"
+```
+
+Exclude common folders/files:
+
+```bash
+treego . --exclude node_modules --exclude standalone --exclude releases --exclude "*.pem"
 ```
 
 ---
