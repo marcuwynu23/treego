@@ -3,7 +3,14 @@
 BINARY_NAME ?= treego
 BIN_DIR ?= bin
 CMD_DIR ?= ./cmd/treego
-OUT ?= $(BIN_DIR)/$(BINARY_NAME)
+
+ifeq ($(OS),Windows_NT)
+EXT ?= .exe
+else
+EXT ?=
+endif
+
+OUT ?= $(BIN_DIR)/$(BINARY_NAME)$(EXT)
 
 help:
 	@echo "Targets:"
