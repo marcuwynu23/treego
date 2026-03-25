@@ -58,10 +58,7 @@ jobs:
         run: go mod download
 
       - name: Generate go.sum
-        run: go mod tidy
-
-      - name: Create bin directory
-        run: mkdir -p bin
+        run: make tidy
 
       - name: Build binary
         env:
@@ -69,7 +66,7 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w" -o bin/treego${{ matrix.ext }} ./cmd/treego
+          make build OUT=bin/treego${{ matrix.ext }}
 
       - name: Create archive (Linux/macOS)
         if: matrix.os == 'linux' || matrix.os == 'darwin'
