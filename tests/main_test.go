@@ -38,6 +38,8 @@ func createTestDir(t *testing.T) (string, func()) {
 	//   │       └── file4.go
 	//   └── dir2/
 	//       └── file5.txt
+	//   └── node_modules/
+	//       └── dep.pem
 
 	// Create files
 	files := []string{
@@ -46,6 +48,7 @@ func createTestDir(t *testing.T) (string, func()) {
 		"dir1/file3.txt",
 		"dir1/subdir1/file4.go",
 		"dir2/file5.txt",
+		"node_modules/dep.pem",
 	}
 
 	for _, file := range files {
@@ -242,6 +245,41 @@ func TestBuildTreeSafe(t *testing.T) {
 				t.Errorf("Result %d should be a directory", i)
 			}
 		}
+	})
+
+	t.Run("build tree with excludes (exact + glob)", func(t *testing.T) {
+		resetGlobalState()
+		tmpDir, cleanup := createTestDir(t)
+		defer cleanup()
+
+		excludes, err := treego.ParseExcludeMatchers([]string{"node_modules", "*.pem"})
+		if err != nil {
+			t.Fatalf("Failed to parse excludes: %v", err)
+		}
+
+		root := treego.BuildTreeSafeWithExcludes(tmpDir, excludes)
+		if root == nil {
+			t.Fatal("Expected non-nil root node")
+		}
+
+		// node_modules directory should be excluded entirely
+		for _, child := range root.Children {
+			if child.Name == "node_modules" {
+				t.Fatal("Expected node_modules to be excluded")
+			}
+		}
+
+		// And no .pem files should appear anywhere in the tree
+		var walk func(n *treego.Node)
+		walk = func(n *treego.Node) {
+			if strings.HasSuffix(n.Name, ".pem") {
+				t.Fatalf("Expected .pem file to be excluded, found %s", n.Path)
+			}
+			for _, c := range n.Children {
+				walk(c)
+			}
+		}
+		walk(root)
 	})
 }
 
