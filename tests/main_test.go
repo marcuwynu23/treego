@@ -464,7 +464,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		treego.PrintTreeDFS(root, "", nil, false)
+		treego.PrintTreeDFS(root, "", "", nil, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -499,7 +499,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		treego.PrintTreeDFS(root, "", nil, true)
+		treego.PrintTreeDFS(root, "", "", nil, true)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -539,7 +539,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		treego.PrintTreeDFS(root, "", re, false)
+		treego.PrintTreeDFS(root, "", "", re, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -574,7 +574,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		treego.PrintTreeDFS(root, "", re, true)
+		treego.PrintTreeDFS(root, "", "", re, true)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -604,7 +604,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		treego.PrintTreeDFS(root, "  ", nil, false)
+		treego.PrintTreeDFS(root, "  ", "", nil, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -631,7 +631,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		treego.PrintTreeDFS(root, "", nil, false)
+		treego.PrintTreeDFS(root, "", "", nil, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -664,7 +664,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		treego.PrintTreeDFS(root, "", re, false)
+		treego.PrintTreeDFS(root, "", "", re, false)
 
 		w.Close()
 		os.Stdout = oldStdout
@@ -683,7 +683,7 @@ func TestPrintTreeDFS(t *testing.T) {
 		var buf2 bytes.Buffer
 		r2, w2, _ := os.Pipe()
 		os.Stdout = w2
-		treego.PrintTreeDFS(root, "", re2, false)
+		treego.PrintTreeDFS(root, "", "", re2, false)
 		w2.Close()
 		os.Stdout = oldStdout
 		buf2.ReadFrom(r2)
@@ -816,7 +816,7 @@ func TestIntegration(t *testing.T) {
 
 		// Print tree
 		printOutput := captureOutput(func() {
-			treego.PrintTreeDFS(root, "", nil, false)
+			treego.PrintTreeDFS(root, "", "", nil, false)
 		})
 		if !strings.Contains(printOutput, "file1.txt") {
 			t.Error("Print tree failed to show file1.txt")
@@ -851,7 +851,7 @@ func TestIntegration(t *testing.T) {
 
 		// Print should return nothing
 		printOutput := captureOutput(func() {
-			treego.PrintTreeDFS(root, "", nil, false)
+			treego.PrintTreeDFS(root, "", "", nil, false)
 		})
 		if printOutput != "" {
 			t.Errorf("Expected empty print output, got: %s", printOutput)
@@ -907,7 +907,7 @@ func BenchmarkPrintTreeDFS(b *testing.B) {
 		// Capture output to avoid cluttering stdout
 		oldStdout := os.Stdout
 		os.Stdout, _ = os.OpenFile(os.DevNull, os.O_WRONLY, 0)
-		treego.PrintTreeDFS(root, "", nil, false)
+		treego.PrintTreeDFS(root, "", "", nil, false)
 		os.Stdout.Close()
 		os.Stdout = oldStdout
 	}
