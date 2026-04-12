@@ -110,3 +110,16 @@ treego . --exclude node_modules --exclude standalone --exclude releases --exclud
 - Concurrent processing of directories for faster traversal.
 
 ---
+
+## Community
+
+Contributions, issues, and feedback are welcome.
+
+- [Contributing guide](CONTRIBUTING.md) — how to set up the project, run tests, and submit changes.
+- [Code of Conduct](CODE_OF_CONDUCT.md) — expected behavior in community spaces.
+- Issue templates — bug reports and feature requests (see **New issue** on GitHub).
+- Pull request template — checklist when you open a PR.
+
+If you would like to support ongoing work, you can use [PayPal.me/wynumarcu23](https://paypal.me/wynumarcu23). The repository **Sponsor** link is configured via `.github/FUNDING.yml`.
+
+---
