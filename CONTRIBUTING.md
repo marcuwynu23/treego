@@ -31,6 +31,15 @@ For race-detector checks (closer to CI):
 make test-race
 ```
 
+The Makefile turns on **`CGO_ENABLED=1`** for race builds because `go test -race` requires CGO on Windows, and it picks a MinGW-compatible **`CC`/`CXX`** for cgo.
+
+**Important:** The usual **LLVM installer** (`clang` with target **`x86_64-pc-windows-msvc`**) is **not** usable as Go’s cgo compiler on Windows (linking `go test -race` fails with errors such as **LNK1143**). You need a **MinGW**-style toolchain, for example:
+
+- **MinGW-w64** so **`gcc` / `g++`** are on your `PATH` (CI uses **`choco install mingw`**), or  
+- **[llvm-mingw](https://github.com/mstorsjo/llvm-mingw)** / **MSYS2 MINGW64**, where **`clang -print-target-triple`** reports a **mingw** (not **msvc**) triple — then the Makefile will use **`clang` / `clang++`** automatically.
+
+To force compilers explicitly: **`make test-race WINDOWS_CGO_CC=... WINDOWS_CGO_CXX=...`** (both must be set). If you prefer not to install a C toolchain, use **`make test`** locally; it runs without the race detector.
+
 ## Guidelines
 
 - Match existing style: formatting (`go fmt`), naming, and structure.
