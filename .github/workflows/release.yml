@@ -45,10 +45,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Per matrix target so parallel jobs do not race on the same cache key.
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: treego-release-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            treego-release-${{ runner.os }}-${{ matrix.os }}-${{ matrix.arch }}-
+            treego-release-${{ runner.os }}-
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.5"
+          cache: false
 
       - name: Get version from tag
         id: tag
