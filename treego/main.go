@@ -9,6 +9,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"context"
+	"golang.org/x/sync/errgroup"
+
 )
 
 type Node struct {
@@ -115,17 +118,93 @@ func BuildTreeSafe(path string) *Node {
 }
 
 func BuildTreeSafeWithExcludes(path string, excludes []ExcludeMatcher) *Node {
-	// Bound parallelism to avoid creating one goroutine per file/dir entry.
-	// This keeps traversal fast on large trees while preventing runaway goroutine/memory usage.
-	maxParallel := runtime.GOMAXPROCS(0) * 16
-	if maxParallel < 32 {
-		maxParallel = 32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	max := runtime.GOMAXPROCS(0) * 16
+	if max < 32 {
+		max = 32
 	}
-	if maxParallel > 512 {
-		maxParallel = 512
+	if max > 512 {
+		max = 512
 	}
-	sem := make(chan struct{}, maxParallel)
-	return buildTreeSafe(path, excludes, sem)
+
+	g.SetLimit(max)
+
+	var mu sync.Mutex
+
+	var build func(string) *Node
+	build = func(p string) *Node {
+		info, err := os.Stat(p)
+		if err != nil {
+			cancel()
+			return nil
+		}
+
+		if shouldExclude(excludes, info.Name(), p) {
+			return nil
+		}
+
+		node := &Node{
+			Name:  info.Name(),
+			IsDir: info.IsDir(),
+			Path:  p,
+		}
+
+		if !info.IsDir() {
+			return node
+		}
+
+		entries, err := os.ReadDir(p)
+		if err != nil {
+			cancel()
+			return nil
+		}
+
+		for _, e := range entries {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+
+			name := e.Name()
+			childPath := filepath.Join(p, name)
+
+			if shouldExclude(excludes, name, childPath) {
+				continue
+			}
+
+			if !e.IsDir() {
+				mu.Lock()
+				node.Children = append(node.Children, &Node{
+					Name: name, Path: childPath, IsDir: false,
+				})
+				mu.Unlock()
+				continue
+			}
+
+			g.Go(func() error {
+				child := build(childPath)
+				if child != nil {
+					mu.Lock()
+					node.Children = append(node.Children, child)
+					mu.Unlock()
+				}
+				return nil
+			})
+		}
+
+		return node
+	}
+
+	root := build(path)
+
+	_ = g.Wait()
+
+	return root
 }
 
 func buildTreeSafe(path string, excludes []ExcludeMatcher, sem chan struct{}) *Node {
